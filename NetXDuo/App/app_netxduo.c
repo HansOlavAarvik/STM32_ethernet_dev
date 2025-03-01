@@ -32,7 +32,6 @@ NX_IP          NetXDuoEthIpInstance;
 NX_UDP_SOCKET UDPSocket;
 ULONG IpAddress;
 ULONG NetMask;
-TX_SEMAPHORE   DHCPSemaphore;
 TX_THREAD AppLinkThread;
 extern UART_HandleTypeDef huart3;
 extern  ETH_HandleTypeDef heth;
@@ -40,10 +39,8 @@ extern  ETH_HandleTypeDef heth;
 
 /* Private function prototypes -----------------------------------------------*/
 static VOID nx_app_thread_entry (ULONG thread_input);
-
 /* USER CODE BEGIN PFP */
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
-static VOID App_Link_Thread_Entry (ULONG thread_input);
 /* USER CODE END PFP */
 
 /**
@@ -76,24 +73,18 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
    * If extra NX_PACKET are to be used the NX_APP_PACKET_POOL_SIZE should be increased
    */
   ret = nx_packet_pool_create(&NxAppPool, "NetXDuo App Pool", DEFAULT_PAYLOAD_SIZE, pointer, NX_APP_PACKET_POOL_SIZE);
+
   if (ret != NX_SUCCESS)
-  {return NX_POOL_ERROR;}
+  {
+    return NX_POOL_ERROR;
+  }
 
     /* Allocate the memory for Ip_Instance */
   if (tx_byte_allocate(byte_pool, (VOID **) &pointer, Nx_IP_INSTANCE_THREAD_SIZE, TX_NO_WAIT) != TX_SUCCESS)
-  {return TX_POOL_ERROR;}
-  tx_semaphore_create(&DHCPSemaphore, "DHCP Semaphore", 0);
-  if (tx_byte_allocate(byte_pool, (VOID **) &pointer, NX_APP_THREAD_STACK_SIZE, TX_NO_WAIT) != TX_SUCCESS)
   {
     return TX_POOL_ERROR;
   }
-  ret = tx_thread_create(&AppLinkThread, "App Link Thread", App_Link_Thread_Entry, 0, pointer, NX_APP_THREAD_STACK_SIZE,
-    LINK_PRIORITY, LINK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
 
-  if (ret != TX_SUCCESS)
-  {
-  return NX_NOT_ENABLED;
-  }
    /* Create the main NX_IP instance */
   ret = nx_ip_create(&NetXDuoEthIpInstance, "NetX Ip instance", NX_APP_DEFAULT_IP_ADDRESS, NX_APP_DEFAULT_NET_MASK, &NxAppPool, nx_stm32_eth_driver,
                      pointer, Nx_IP_INSTANCE_THREAD_SIZE, NX_APP_INSTANCE_PRIORITY);
@@ -115,6 +106,7 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   /* USER CODE END ARP_Protocol_Initialization */
 
   ret = nx_arp_enable(&NetXDuoEthIpInstance, (VOID *)pointer, DEFAULT_ARP_CACHE_SIZE);
+
   if (ret != NX_SUCCESS)
   {
     return NX_NOT_SUCCESSFUL;
@@ -126,6 +118,7 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   /* USER CODE END UDP_Protocol_Initialization */
 
   ret = nx_udp_enable(&NetXDuoEthIpInstance);
+
   if (ret != NX_SUCCESS)
   {
     return NX_NOT_SUCCESSFUL;
@@ -140,18 +133,21 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   /* Create the main thread */
   ret = tx_thread_create(&NxAppThread, "NetXDuo App thread", nx_app_thread_entry , 0, pointer, NX_APP_THREAD_STACK_SIZE,
                          NX_APP_THREAD_PRIORITY, NX_APP_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+
   if (ret != TX_SUCCESS)
   {
     return TX_THREAD_ERROR;
   }
 
   /* USER CODE BEGIN MX_NetXDuo_Init */
+
   /* USER CODE BEGIN MX_NetXDuo_Init */
 
   /* USER CODE END MX_NetXDuo_Init */
 
   return ret;
 }
+
 /**
 * @brief  Main thread entry.
 * @param thread_input: ULONG user argument used by the thread entry
@@ -169,7 +165,6 @@ static VOID nx_app_thread_entry (ULONG thread_input)
   ULONG source_ip_address;
   NX_PACKET *server_packet;
   UINT source_port;
-
 /* Check PHY link status using the correct function signature */
 uint32_t regvalue = 0;
 /* Basic Status Register address is 0x01 for most PHYs */
@@ -269,50 +264,4 @@ else
 }
 /* USER CODE BEGIN 1 */
 
-static VOID App_Link_Thread_Entry(ULONG thread_input)
-{
-  (void)thread_input;
-  ULONG actual_status;
-  UINT linkdown = 0, status;
-
-  while(1)
-  {
-    /* Send request to check if the Ethernet cable is connected. */
-    status = nx_ip_interface_status_check(&NetXDuoEthIpInstance, 0, NX_IP_LINK_ENABLED,
-                                      &actual_status, 10);
-
-    if(status == NX_SUCCESS)
-    {
-      if(linkdown == 1)
-      {
-        linkdown = 0;
-        /* The network cable is connected. */
-        printf("The network cable is connected.\n");
-
-        /* Send request to enable PHY Link. */
-        nx_ip_driver_direct_command(&NetXDuoEthIpInstance, NX_LINK_ENABLE,
-                                    &actual_status);
-                                    
-        /* If using static IP, just notify about link being up */
-        printf("Link is up with IP: ");
-        PRINT_IP_ADDRESS(IpAddress);
-        
-        /* For static IP, put a semaphore if you need to signal other threads */
-        tx_semaphore_put(&DHCPSemaphore);
-      }
-    }
-    else
-    {
-      if(0 == linkdown)
-      {
-        linkdown = 1;
-        /* The network cable is not connected. */
-        printf("The network cable is not connected.\n");
-        nx_ip_driver_direct_command(&NetXDuoEthIpInstance, NX_LINK_DISABLE,
-                                    &actual_status);
-      }
-    }
-
-    tx_thread_sleep(NX_APP_CABLE_CONNECTION_CHECK_PERIOD);
-  }
-}
+/* USER CODE END 1 */
