@@ -218,7 +218,6 @@ printf("Current MAC: %02X-%02X-%02X-%02X-%02X-%02X\r\n",
       Error_Handler();
       printf("Socket not created.");
   }
-
 /* Bind to port 6000 */
   ret = nx_udp_socket_bind(&UDPSocket, DEFAULT_PORT, TX_WAIT_FOREVER);
   if (ret != NX_SUCCESS)
@@ -230,23 +229,19 @@ printf("Current MAC: %02X-%02X-%02X-%02X-%02X-%02X\r\n",
   {
       printf("UDP Server listening on PORT 6000.. \r\n");
   }
-
 /*  Main Task Loop
     Waits 1 second (100 centiseconds) for each UDP packet. If received, print out message*/
   while (1)
   {
       TX_MEMSET(data_buffer, '\0', sizeof(data_buffer));
-
       /* wait for data for 1 sec */
       ret = nx_udp_socket_receive(&UDPSocket, &server_packet, 100);
-
       if (ret == NX_SUCCESS)
 {
     nx_packet_data_retrieve(server_packet, data_buffer, &bytes_read);
     nx_udp_source_extract(server_packet, &source_ip_address, &source_port);
     /* Print our received data on UART com port*/
     PRINT_DATA(source_ip_address, source_port, data_buffer);
-
     // new line to make print out more readable
     nx_packet_release(server_packet);
 }
@@ -257,10 +252,8 @@ else
 }
       //static ULONG counter = 0;
       //printf("Loop iteration %lu, waiting for packets...\r\n", counter++);
-
   }
   /* USER CODE END Nx_App_Thread_Entry 0 */
-
 }
 /* USER CODE BEGIN 1 */
 
