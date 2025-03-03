@@ -32,15 +32,18 @@ NX_IP          NetXDuoEthIpInstance;
 NX_UDP_SOCKET UDPSocket;
 ULONG IpAddress;
 ULONG NetMask;
+TX_THREAD SensorDataThread;
 TX_THREAD AppLinkThread;
 extern UART_HandleTypeDef huart3;
 extern  ETH_HandleTypeDef heth;
+extern volatile UINT send_data_flag;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 static VOID nx_app_thread_entry (ULONG thread_input);
 /* USER CODE BEGIN PFP */
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
+static VOID sensor_data_thread_entry(ULONG thread_input);
 /* USER CODE END PFP */
 
 /**
@@ -131,8 +134,10 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   }
 
   /* Create the main thread */
-  ret = tx_thread_create(&NxAppThread, "NetXDuo App thread", nx_app_thread_entry , 0, pointer, NX_APP_THREAD_STACK_SIZE,
-                         NX_APP_THREAD_PRIORITY, NX_APP_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+  ret = tx_thread_create(&NxAppThread, "NetXDuo App thread", nx_app_thread_entry ,
+                       0, pointer, NX_APP_THREAD_STACK_SIZE,
+                         NX_APP_THREAD_PRIORITY, NX_APP_THREAD_PRIORITY,
+                          TX_NO_TIME_SLICE, TX_AUTO_START);
 
   if (ret != TX_SUCCESS)
   {
@@ -140,7 +145,19 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   }
 
   /* USER CODE BEGIN MX_NetXDuo_Init */
+  if (tx_byte_allocate(byte_pool, (VOID **) &pointer, NX_APP_THREAD_STACK_SIZE, TX_NO_WAIT) != TX_SUCCESS)
+  {
+    return TX_POOL_ERROR;
+  }
+  ret = tx_thread_create(&SensorDataThread, "Sensor Data Thread", sensor_data_thread_entry, 0, 
+                        pointer, NX_APP_THREAD_STACK_SIZE,
+                        SENSOR_THREAD_PRIORITY, SENSOR_THREAD_PRIORITY, 
+                        TX_NO_TIME_SLICE, TX_AUTO_START);
 
+if (ret != TX_SUCCESS)
+{
+return TX_THREAD_ERROR;
+}
   /* USER CODE BEGIN MX_NetXDuo_Init */
 
   /* USER CODE END MX_NetXDuo_Init */
@@ -254,7 +271,68 @@ else
       //printf("Loop iteration %lu, waiting for packets...\r\n", counter++);
   }
   /* USER CODE END Nx_App_Thread_Entry 0 */
+
 }
 /* USER CODE BEGIN 1 */
-
+static VOID sensor_data_thread_entry(ULONG thread_input)
+{
+  UINT ret;
+  NX_PACKET *packet_ptr;
+  ULONG destination_ip = IP_ADDRESS(192, 168, 1, 101); /* Replace with your PC's IP */
+  UINT destination_port = 6000; /* Can be same as server port or different */
+  CHAR message[64];
+  
+  while(1)
+  {
+    /* Check if button was pressed or if sensor data is ready */
+    if(send_data_flag)
+    {
+      /* Clear flag */
+      send_data_flag = 0;
+      
+      /* Create message */
+      snprintf(message, sizeof(message), "Button pressed! Timestamp: %lu", tx_time_get());
+      
+      /* Allocate a packet */
+      ret = nx_packet_allocate(&NxAppPool, &packet_ptr, NX_UDP_PACKET, TX_WAIT_FOREVER);
+      if (ret != NX_SUCCESS)
+      {
+        printf("Packet allocation failed: %d\r\n", ret);
+        continue;
+      }
+      
+      /* Append data to the packet */
+      ret = nx_packet_data_append(packet_ptr, message, strlen(message), 
+                                 &NxAppPool, TX_WAIT_FOREVER);
+      if (ret != NX_SUCCESS)
+      {
+        printf("Data append failed: %d\r\n", ret);
+        nx_packet_release(packet_ptr);
+        
+        continue;
+      }
+      
+      /* Send the UDP packet */
+      ret = nx_udp_socket_send(&UDPSocket, packet_ptr, destination_ip, destination_port);
+      if (ret != NX_SUCCESS)
+      {
+        printf("UDP send failed: %d\r\n", ret);
+        nx_packet_release(packet_ptr);
+      }
+      else
+      {
+        printf("Sent message to %lu.%lu.%lu.%lu:%u\r\n", 
+               (destination_ip >> 24) & 0xFF, 
+               (destination_ip >> 16) & 0xFF,
+               (destination_ip >> 8) & 0xFF, 
+               destination_ip & 0xFF,
+               destination_port);
+               HAL_GPIO_WritePin(LED_1_GPIO_Port,LED_1_Pin,GPIO_PIN_RESET);
+      }
+    }
+    
+    /* Sleep to prevent hogging CPU - adjust timing based on your needs */
+    tx_thread_sleep(10); /* 100ms */
+  }
+}
 /* USER CODE END 1 */
