@@ -21,9 +21,11 @@
 #include "main.h"
 #include "string.h"
 
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
+#include "app_netxduo.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -57,20 +59,35 @@ ETH_DMADescTypeDef  DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptor
 
 ETH_HandleTypeDef heth;
 
+I2S_HandleTypeDef hi2s2;
+DMA_NodeTypeDef Node_GPDMA1_Channel0;
+DMA_QListTypeDef List_GPDMA1_Channel0;
+DMA_HandleTypeDef handle_GPDMA1_Channel0;
+
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
-volatile UINT send_data_flag = 0;
+//For microphone/dma
+
+int32_t data_i2s[AUDIO_BUFFER];
+int32_t data_i2s[TEMP_BUFFER];
+volatile int32_t sample_i2s;
+ALIGN_32BYTES(int32_t audioBuffer[AUDIO_BUFFER]);
+uint16_t DMA_size = AUDIO_BUFFER * 2;
+volatile uint8_t half = 0;
+extern TX_EVENT_FLAGS_GROUP sensor_events;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_GPDMA1_Init(void);
 static void MX_ETH_Init(void);
 static void MX_ICACHE_Init(void);
+static void MX_I2S2_Init(void);
 static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+void process_buffer(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -116,12 +133,19 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_GPDMA1_Init();
   MX_ETH_Init();
   MX_ICACHE_Init();
+  MX_I2S2_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   printf("STM32 UDP Application Starting\r\n");
   HAL_UART_Transmit(&huart3, (uint8_t *)"Direct UART test\r\n", 18, 0xFFFF);
+  printf("Started DMA\n");
+  HAL_I2S_Receive_DMA(&hi2s2,
+                   (uint16_t *)data_i2s,
+                   DMA_size);
+  
   /* USER CODE END 2 */
 
   MX_ThreadX_Init();
@@ -236,6 +260,70 @@ static void MX_ETH_Init(void)
   /* USER CODE BEGIN ETH_Init 2 */
 
   /* USER CODE END ETH_Init 2 */
+
+}
+
+/**
+  * @brief GPDMA1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPDMA1_Init(void)
+{
+
+  /* USER CODE BEGIN GPDMA1_Init 0 */
+
+  /* USER CODE END GPDMA1_Init 0 */
+
+  /* Peripheral clock enable */
+  __HAL_RCC_GPDMA1_CLK_ENABLE();
+
+  /* GPDMA1 interrupt Init */
+    HAL_NVIC_SetPriority(GPDMA1_Channel0_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(GPDMA1_Channel0_IRQn);
+
+  /* USER CODE BEGIN GPDMA1_Init 1 */
+
+  /* USER CODE END GPDMA1_Init 1 */
+  /* USER CODE BEGIN GPDMA1_Init 2 */
+
+  /* USER CODE END GPDMA1_Init 2 */
+
+}
+
+/**
+  * @brief I2S2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2S2_Init(void)
+{
+
+  /* USER CODE BEGIN I2S2_Init 0 */
+
+  /* USER CODE END I2S2_Init 0 */
+
+  /* USER CODE BEGIN I2S2_Init 1 */
+
+  /* USER CODE END I2S2_Init 1 */
+  hi2s2.Instance = SPI2;
+  hi2s2.Init.Mode = I2S_MODE_MASTER_RX;
+  hi2s2.Init.Standard = I2S_STANDARD_PHILIPS;
+  hi2s2.Init.DataFormat = I2S_DATAFORMAT_24B;
+  hi2s2.Init.MCLKOutput = I2S_MCLKOUTPUT_DISABLE;
+  hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_32K;
+  hi2s2.Init.CPOL = I2S_CPOL_LOW;
+  hi2s2.Init.FirstBit = I2S_FIRSTBIT_MSB;
+  hi2s2.Init.WSInversion = I2S_WS_INVERSION_DISABLE;
+  hi2s2.Init.Data24BitAlignment = I2S_DATA_24BIT_ALIGNMENT_RIGHT;
+  hi2s2.Init.MasterKeepIOState = I2S_MASTER_KEEP_IO_STATE_DISABLE;
+  if (HAL_I2S_Init(&hi2s2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2S2_Init 2 */
+
+  /* USER CODE END I2S2_Init 2 */
 
 }
 
@@ -424,9 +512,23 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
   if(GPIO_Pin == USER_BTN_Pin) 
   {
     HAL_GPIO_WritePin(LED_1_GPIO_Port,LED_1_Pin, GPIO_PIN_SET);
-    send_data_flag = 1;
   }
 }
+void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s2)
+{
+  half = 1;  // Second half
+  // Set the event flag
+  tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
+}
+
+void HAL_I2SEx_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
+{
+  half = 0;  // First half
+  // Set the event flag instead of a simple variable
+  tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
+}
+
+
 
 /* USER CODE END 4 */
 

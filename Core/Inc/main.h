@@ -124,6 +124,13 @@ void Error_Handler(void);
 #define ARD_D0_RX_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define AUDIO_BUFFER       124
+#define TEMP_BUFFER        124
+#define AUDIO_DATA_FLAG     0x0001
+#define TEMPHUMID_DATA_FLAG 0x0002  
+#define BUTTON_DATA_FLAG    0x0004
+
+
 
 /* USER CODE END Private defines */
 

@@ -92,7 +92,19 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr);
 #define SENSOR_THREAD_STACK_SIZE 1024
 #define SENSOR_THREAD_PRIORITY 5
 
+#define DESTINATION_IP                    IP_ADDRESS(192, 168, 1, 101)
 
+#define AUDIO_PORT                        6001
+#define TEMPHUMID_PORT                    6002
+#define BUTTON_PORT                       6003
+
+typedef struct {
+  void* data_ptr;        /* Pointer to data buffer */
+  UINT data_size;        /* Size of data in bytes */
+  UINT data_type;        /* Type identifier */
+  ULONG destination_ip;  /* Destination IP address */
+  UINT destination_port; /* Destination port */
+} UDP_Data_Packet;
 /* USER CODE END PD */
 
 #define NX_APP_DEFAULT_TIMEOUT               (10 * NX_IP_PERIODIC_RATE)

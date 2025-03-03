@@ -34,16 +34,25 @@ ULONG IpAddress;
 ULONG NetMask;
 TX_THREAD SensorDataThread;
 TX_THREAD AppLinkThread;
+TX_EVENT_FLAGS_GROUP sensor_events;
 extern UART_HandleTypeDef huart3;
 extern  ETH_HandleTypeDef heth;
-extern volatile UINT send_data_flag;
+
+
+
+// mic /dma 
+extern int32_t data_i2s[];
+extern uint8_t temp_buffer[];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 static VOID nx_app_thread_entry (ULONG thread_input);
+
 /* USER CODE BEGIN PFP */
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
 static VOID sensor_data_thread_entry(ULONG thread_input);
+
 /* USER CODE END PFP */
 
 /**
@@ -134,10 +143,8 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   }
 
   /* Create the main thread */
-  ret = tx_thread_create(&NxAppThread, "NetXDuo App thread", nx_app_thread_entry ,
-                       0, pointer, NX_APP_THREAD_STACK_SIZE,
-                         NX_APP_THREAD_PRIORITY, NX_APP_THREAD_PRIORITY,
-                          TX_NO_TIME_SLICE, TX_AUTO_START);
+  ret = tx_thread_create(&NxAppThread, "NetXDuo App thread", nx_app_thread_entry , 0, pointer, NX_APP_THREAD_STACK_SIZE,
+                         NX_APP_THREAD_PRIORITY, NX_APP_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
 
   if (ret != TX_SUCCESS)
   {
@@ -159,7 +166,7 @@ if (ret != TX_SUCCESS)
 return TX_THREAD_ERROR;
 }
   /* USER CODE BEGIN MX_NetXDuo_Init */
-
+  tx_event_flags_create(&sensor_events, "Sensor Events");
   /* USER CODE END MX_NetXDuo_Init */
 
   return ret;
@@ -274,65 +281,110 @@ else
 
 }
 /* USER CODE BEGIN 1 */
-static VOID sensor_data_thread_entry(ULONG thread_input)
+void sensor_thread_entry(ULONG thread_input)
+{
+    UDP_Data_Packet packet;
+    packet.destination_ip = DESTINATION_IP;
+    ULONG actual_flags;
+    
+    while(1)
+    {
+        // Wait for ANY flag to be set (blocking approach)
+        tx_event_flags_get(&sensor_events, 
+                          AUDIO_DATA_FLAG | TEMPHUMID_DATA_FLAG | BUTTON_DATA_FLAG,
+                          TX_OR_CLEAR,  // Get any flag and clear it
+                          &actual_flags, 
+                          TX_WAIT_FOREVER);  // Block until any flag is set
+        
+        // Process the flags in priority order (if timing is critical)
+        if(actual_flags & AUDIO_DATA_FLAG)
+        {
+            // Process audio data first (highest priority)
+            packet.data_ptr = AUDIO_BUFFER + (half ? HALF_BUFFER_SIZE : 0);
+            packet.data_size = HALF_BUFFER_SIZE;
+            packet.data_type = 0;
+            
+            UDP_Send(&packet, AUDIO_PORT);
+        }
+        
+        if(actual_flags & TEMPHUMID_DATA_FLAG)
+        {
+            // Process temperature data
+            packet.data_ptr = temp_buffer;
+            packet.data_size = TEMP_BUFFER_SIZE;
+            packet.data_type = 1;
+            
+            UDP_Send(&packet, TEMPHUMID_PORT);
+        }
+        
+        if(actual_flags & BUTTON_DATA_FLAG)
+        {
+            // Process button press (lowest priority)
+            char button_msg[32];
+            snprintf(button_msg, sizeof(button_msg), "Button pressed! Count: %d", button_count++);
+            
+            packet.data_ptr = button_msg;
+            packet.data_size = strlen(button_msg);
+            packet.data_type = 2;
+            
+            UDP_Send(&packet, BUTTON_PORT);
+        }
+    }
+}
+/* UDP sending function */
+UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
 {
   UINT ret;
-  NX_PACKET *packet_ptr;
-  ULONG destination_ip = IP_ADDRESS(192, 168, 1, 101); /* Replace with your PC's IP */
-  UINT destination_port = 6000; /* Can be same as server port or different */
-  CHAR message[64];
+  NX_PACKET* nx_packet_ptr;
   
-  while(1)
+  /* Validate inputs */
+  if (packet == NULL || packet->data_ptr == NULL || packet->data_size == 0)
   {
-    /* Check if button was pressed or if sensor data is ready */
-    if(send_data_flag)
-    {
-      /* Clear flag */
-      send_data_flag = 0;
-      
-      /* Create message */
-      snprintf(message, sizeof(message), "Button pressed! Timestamp: %lu", tx_time_get());
-      
-      /* Allocate a packet */
-      ret = nx_packet_allocate(&NxAppPool, &packet_ptr, NX_UDP_PACKET, TX_WAIT_FOREVER);
-      if (ret != NX_SUCCESS)
-      {
-        printf("Packet allocation failed: %d\r\n", ret);
-        continue;
-      }
-      
-      /* Append data to the packet */
-      ret = nx_packet_data_append(packet_ptr, message, strlen(message), 
-                                 &NxAppPool, TX_WAIT_FOREVER);
-      if (ret != NX_SUCCESS)
-      {
-        printf("Data append failed: %d\r\n", ret);
-        nx_packet_release(packet_ptr);
-        
-        continue;
-      }
-      
-      /* Send the UDP packet */
-      ret = nx_udp_socket_send(&UDPSocket, packet_ptr, destination_ip, destination_port);
-      if (ret != NX_SUCCESS)
-      {
-        printf("UDP send failed: %d\r\n", ret);
-        nx_packet_release(packet_ptr);
-      }
-      else
-      {
-        printf("Sent message to %lu.%lu.%lu.%lu:%u\r\n", 
-               (destination_ip >> 24) & 0xFF, 
-               (destination_ip >> 16) & 0xFF,
-               (destination_ip >> 8) & 0xFF, 
-               destination_ip & 0xFF,
-               destination_port);
-               HAL_GPIO_WritePin(LED_1_GPIO_Port,LED_1_Pin,GPIO_PIN_RESET);
-      }
-    }
-    
-    /* Sleep to prevent hogging CPU - adjust timing based on your needs */
-    tx_thread_sleep(10); /* 100ms */
+      return NX_INVALID_PARAMETERS;
   }
+  
+  /* Allocate a packet */
+  ret = nx_packet_allocate(&NxAppPool, &nx_packet_ptr, NX_UDP_PACKET, TX_WAIT_FOREVER);
+  if (ret != NX_SUCCESS)
+  {
+      printf("Packet allocation failed: %d\r\n", ret);
+      return ret;
+  }
+  
+  /* Append data to the packet */
+  ret = nx_packet_data_append(nx_packet_ptr, packet->data_ptr, packet->data_size, 
+                             &NxAppPool, TX_WAIT_FOREVER);
+  if (ret != NX_SUCCESS)
+  {
+      printf("Data append failed: %d\r\n", ret);
+      nx_packet_release(nx_packet_ptr);
+      return ret;
+  }
+  
+  /* Send the UDP packet */
+  ret = nx_udp_socket_send(&UDPSocket, nx_packet_ptr, 
+                          packet->destination_ip, packet->destination_port);
+  if (ret != NX_SUCCESS)
+  {
+      printf("UDP send failed: %d\r\n", ret);
+      nx_packet_release(nx_packet_ptr);
+      return ret;
+  }
+  
+  /* Log successful transmission (optional) */
+  if (packet->data_type == 0) /* Audio data */
+  {
+      printf("Sent audio packet (%u bytes) to %lu.%lu.%lu.%lu:%u\r\n", 
+             packet->data_size,
+             (packet->destination_ip >> 24) & 0xFF, 
+             (packet->destination_ip >> 16) & 0xFF,
+             (packet->destination_ip >> 8) & 0xFF, 
+             packet->destination_ip & 0xFF,
+             packet->destination_port);
+  }
+  
+  return NX_SUCCESS;
 }
+
+
 /* USER CODE END 1 */
