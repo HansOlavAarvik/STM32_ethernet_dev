@@ -42,16 +42,17 @@ extern  ETH_HandleTypeDef heth;
 
 // mic /dma 
 extern int32_t data_i2s[];
-extern uint8_t temp_buffer[];
-
+extern int32_t temp_buffer[];
+UINT HALF_BUFFER_SIZE = AUDIO_BUFFER_SIZE /2;
+extern volatile uint8_t half;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 static VOID nx_app_thread_entry (ULONG thread_input);
-
 /* USER CODE BEGIN PFP */
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
-static VOID sensor_data_thread_entry(ULONG thread_input);
+static VOID sensor_thread_entry(ULONG thread_input);
+UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port);
 
 /* USER CODE END PFP */
 
@@ -156,7 +157,7 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   {
     return TX_POOL_ERROR;
   }
-  ret = tx_thread_create(&SensorDataThread, "Sensor Data Thread", sensor_data_thread_entry, 0, 
+  ret = tx_thread_create(&SensorDataThread, "Sensor Data Thread", sensor_thread_entry, 0, 
                         pointer, NX_APP_THREAD_STACK_SIZE,
                         SENSOR_THREAD_PRIORITY, SENSOR_THREAD_PRIORITY, 
                         TX_NO_TIME_SLICE, TX_AUTO_START);
@@ -181,7 +182,7 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 {
   /* USER CODE BEGIN Nx_App_Thread_Entry 0 */
   (void)thread_input;
-  tx_thread_sleep(500); /* Sleep for 1 second to allow Ethernet to initialize */
+  tx_thread_sleep(400); /* Sleep for 1 second to allow Ethernet to initialize */
   printf("Starting UDP server after initialization delay\r\n");
   UINT ret;
   ULONG bytes_read;
@@ -283,6 +284,8 @@ else
 /* USER CODE BEGIN 1 */
 void sensor_thread_entry(ULONG thread_input)
 {
+    tx_thread_sleep(500);
+    (void)thread_input;
     UDP_Data_Packet packet;
     packet.destination_ip = DESTINATION_IP;
     ULONG actual_flags;
@@ -300,7 +303,7 @@ void sensor_thread_entry(ULONG thread_input)
         if(actual_flags & AUDIO_DATA_FLAG)
         {
             // Process audio data first (highest priority)
-            packet.data_ptr = AUDIO_BUFFER + (half ? HALF_BUFFER_SIZE : 0);
+            packet.data_ptr = (void*)(data_i2s + (half ? HALF_BUFFER_SIZE : 0));
             packet.data_size = HALF_BUFFER_SIZE;
             packet.data_type = 0;
             
@@ -321,6 +324,7 @@ void sensor_thread_entry(ULONG thread_input)
         {
             // Process button press (lowest priority)
             char button_msg[32];
+            static UINT button_count = 0;
             snprintf(button_msg, sizeof(button_msg), "Button pressed! Count: %d", button_count++);
             
             packet.data_ptr = button_msg;
@@ -362,8 +366,7 @@ UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
   }
   
   /* Send the UDP packet */
-  ret = nx_udp_socket_send(&UDPSocket, nx_packet_ptr, 
-                          packet->destination_ip, packet->destination_port);
+  ret = nx_udp_socket_send(&UDPSocket, nx_packet_ptr, packet->destination_ip, destination_port);
   if (ret != NX_SUCCESS)
   {
       printf("UDP send failed: %d\r\n", ret);
@@ -371,8 +374,8 @@ UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
       return ret;
   }
   
-  /* Log successful transmission (optional) */
-  if (packet->data_type == 0) /* Audio data */
+ /*
+  if (packet->data_type == 0) 
   {
       printf("Sent audio packet (%u bytes) to %lu.%lu.%lu.%lu:%u\r\n", 
              packet->data_size,
@@ -382,7 +385,7 @@ UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
              packet->destination_ip & 0xFF,
              packet->destination_port);
   }
-  
+  */
   return NX_SUCCESS;
 }
 

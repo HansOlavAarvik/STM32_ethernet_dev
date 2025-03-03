@@ -21,7 +21,6 @@
 #include "main.h"
 #include "string.h"
 
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
@@ -69,13 +68,14 @@ UART_HandleTypeDef huart3;
 /* USER CODE BEGIN PV */
 //For microphone/dma
 
-int32_t data_i2s[AUDIO_BUFFER];
-int32_t data_i2s[TEMP_BUFFER];
+int32_t data_i2s[AUDIO_BUFFER_SIZE];
+int32_t temp_buffer[TEMP_BUFFER_SIZE];
 volatile int32_t sample_i2s;
-ALIGN_32BYTES(int32_t audioBuffer[AUDIO_BUFFER]);
-uint16_t DMA_size = AUDIO_BUFFER * 2;
+ALIGN_32BYTES(int32_t audioBuffer[AUDIO_BUFFER_SIZE]);
+uint16_t DMA_size = AUDIO_BUFFER_SIZE * 2;
 volatile uint8_t half = 0;
 extern TX_EVENT_FLAGS_GROUP sensor_events;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -516,13 +516,15 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
 }
 void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s2)
 {
+  (void)hi2s2;
   half = 1;  // Second half
   // Set the event flag
   tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
 }
 
-void HAL_I2SEx_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
+void HAL_I2SEx_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s2)
 {
+  (void)hi2s2;
   half = 0;  // First half
   // Set the event flag instead of a simple variable
   tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
