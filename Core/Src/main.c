@@ -314,7 +314,7 @@ static void MX_I2S2_Init(void)
   hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_32K;
   hi2s2.Init.CPOL = I2S_CPOL_LOW;
   hi2s2.Init.FirstBit = I2S_FIRSTBIT_MSB;
-  hi2s2.Init.WSInversion = I2S_WS_INVERSION_DISABLE;
+  hi2s2.Init.WSInversion = I2S_WS_INVERSION_ENABLE;
   hi2s2.Init.Data24BitAlignment = I2S_DATA_24BIT_ALIGNMENT_RIGHT;
   hi2s2.Init.MasterKeepIOState = I2S_MASTER_KEEP_IO_STATE_DISABLE;
   if (HAL_I2S_Init(&hi2s2) != HAL_OK)

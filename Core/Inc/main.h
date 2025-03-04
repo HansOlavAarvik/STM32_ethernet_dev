@@ -126,6 +126,7 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 #define AUDIO_BUFFER_SIZE       512
+#define HALF_BUFFER_SIZE       256
 #define TEMP_BUFFER_SIZE        512
 #define AUDIO_DATA_FLAG     0x0001
 #define TEMPHUMID_DATA_FLAG 0x0002  

@@ -43,8 +43,8 @@ extern  ETH_HandleTypeDef heth;
 // mic /dma 
 extern int32_t data_i2s[];
 extern int32_t temp_buffer[];
-UINT HALF_BUFFER_SIZE = AUDIO_BUFFER_SIZE /2;
 extern volatile uint8_t half;
+int16_t processed_audio[HALF_BUFFER_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -53,6 +53,7 @@ static VOID nx_app_thread_entry (ULONG thread_input);
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
 static VOID sensor_thread_entry(ULONG thread_input);
 UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port);
+void process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size);
 
 /* USER CODE END PFP */
 
@@ -303,8 +304,11 @@ void sensor_thread_entry(ULONG thread_input)
         if(actual_flags & AUDIO_DATA_FLAG)
         {
             // Process audio data first (highest priority)
-            packet.data_ptr = (void*)(data_i2s + (half ? HALF_BUFFER_SIZE : 0));
-            packet.data_size = HALF_BUFFER_SIZE;
+            uint32_t* source_buffer = data_i2s + (half ? HALF_BUFFER_SIZE : 0);
+            
+            process_i2s_data(source_buffer, processed_audio, HALF_BUFFER_SIZE);
+            packet.data_ptr = processed_audio;
+            packet.data_size = HALF_BUFFER_SIZE * sizeof(int16_t);
             packet.data_type = 0;
             
             UDP_Send(&packet, AUDIO_PORT);
@@ -387,6 +391,21 @@ UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
   }
   */
   return NX_SUCCESS;
+}
+void process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size) {
+  for (uint16_t i = 0; i < size; i++) {
+      // Extract the 24-bit audio sample (stored in the first 24 bits of each 32-bit word)
+      int32_t sample = source[i] & 0xFFFFFF;
+      
+      // Sign-extend from 24-bit to 32-bit if MSB is set
+      if (sample & 0x800000) {
+          sample |= 0xFF000000;
+      }
+      
+      // Convert to 16-bit by scaling down (losing some precision)
+      // Shift right by 8 bits (divide by 256)
+      dest[i] = (int16_t)(sample >> 8);
+  }
 }
 
 
