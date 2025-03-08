@@ -53,7 +53,8 @@ static VOID nx_app_thread_entry (ULONG thread_input);
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
 static VOID sensor_thread_entry(ULONG thread_input);
 UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port);
-void process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size);
+int16_t process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size);
+void print_hex(uint32_t value);
 
 /* USER CODE END PFP */
 
@@ -271,16 +272,8 @@ printf("Current MAC: %02X-%02X-%02X-%02X-%02X-%02X\r\n",
     // new line to make print out more readable
     nx_packet_release(server_packet);
 }
-else
-{
-    /* Print error information */
-    //printf("Socket receive status: %d (0=Success, 7=No data)\r\n", ret);
-}
-      //static ULONG counter = 0;
-      //printf("Loop iteration %lu, waiting for packets...\r\n", counter++);
-  }
   /* USER CODE END Nx_App_Thread_Entry 0 */
-
+  }
 }
 /* USER CODE BEGIN 1 */
 void sensor_thread_entry(ULONG thread_input)
@@ -304,13 +297,12 @@ void sensor_thread_entry(ULONG thread_input)
         if(actual_flags & AUDIO_DATA_FLAG)
         {
             // Process audio data first (highest priority)
-            uint32_t* source_buffer = data_i2s + (half ? HALF_BUFFER_SIZE : 0);
+            uint32_t* source_buffer = data_i2s + (HALF_BUFFER_SIZE * half);
             
-            process_i2s_data(source_buffer, processed_audio, HALF_BUFFER_SIZE);
+            uint16_t actual_samples = process_i2s_data(source_buffer, processed_audio, HALF_BUFFER_SIZE);
             packet.data_ptr = processed_audio;
-            packet.data_size = HALF_BUFFER_SIZE * sizeof(int16_t);
+            packet.data_size = actual_samples * sizeof(int16_t);
             packet.data_type = 0;
-            
             UDP_Send(&packet, AUDIO_PORT);
         }
         
@@ -378,35 +370,34 @@ UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
       return ret;
   }
   
- /*
-  if (packet->data_type == 0) 
-  {
-      printf("Sent audio packet (%u bytes) to %lu.%lu.%lu.%lu:%u\r\n", 
-             packet->data_size,
-             (packet->destination_ip >> 24) & 0xFF, 
-             (packet->destination_ip >> 16) & 0xFF,
-             (packet->destination_ip >> 8) & 0xFF, 
-             packet->destination_ip & 0xFF,
-             packet->destination_port);
-  }
-  */
   return NX_SUCCESS;
 }
-void process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size) {
-  for (uint16_t i = 0; i < size; i++) {
-      // Extract the 24-bit audio sample (stored in the first 24 bits of each 32-bit word)
-      int32_t sample = source[i] & 0xFFFFFF;
-      
-      // Sign-extend from 24-bit to 32-bit if MSB is set
-      if (sample & 0x800000) {
-          sample |= 0xFF000000;
-      }
-      
-      // Convert to 16-bit by scaling down (losing some precision)
-      // Shift right by 8 bits (divide by 256)
-      dest[i] = (int16_t)(sample >> 8);
+
+int16_t process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size) { 
+  // static uint32_t debug_counter = 0;  
+  // if (debug_counter++ % 100 == 0) {
+  //   printf("Hex values:\n");
+  //   for (uint16_t i = 0; i < 10 && i < size; i++) {
+  //     print_hex(source[i]);
+  //     int32_t sample = (int32_t)source[i];
+  //     int32_t data18 = ((sample >> 6) & 0x3FFFF);
+  //     int16_t reduced = (int16_t)(data18 >>2);
+  //     print_hex1(reduced);
+  //   }
+  // }
+  uint16_t dest_idx = 0;
+  for (uint16_t i = 0; i < size; i++) {    
+    if (source[i] == 0x00000000){continue;}
+    int32_t sample = (int32_t)source[i];
+    //int32_t data18 = ((sample >> 6) & 0x3FFFF);
+    dest[dest_idx++] = (int16_t)(sample >>2);
   }
+  return dest_idx;
 }
-
-
+void print_hex(uint32_t value) {
+  printf("0x%08lX\n", (unsigned long)value);
+}
+void print_hex1(uint16_t value) {
+  printf("0x%08lX\n", (unsigned long)value);
+}
 /* USER CODE END 1 */

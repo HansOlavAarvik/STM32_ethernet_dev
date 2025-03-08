@@ -68,11 +68,10 @@ UART_HandleTypeDef huart3;
 /* USER CODE BEGIN PV */
 //For microphone/dma
 
-int32_t data_i2s[AUDIO_BUFFER_SIZE];
+volatile int32_t data_i2s[AUDIO_BUFFER_SIZE];
 int32_t temp_buffer[TEMP_BUFFER_SIZE];
-volatile int32_t sample_i2s;
-ALIGN_32BYTES(int32_t audioBuffer[AUDIO_BUFFER_SIZE]);
-uint16_t DMA_size = AUDIO_BUFFER_SIZE * 2;
+//ALIGN_32BYTES(int32_t audioBuffer[AUDIO_BUFFER_SIZE]);
+static uint16_t DMA_size = AUDIO_BUFFER_SIZE *4;
 volatile uint8_t half = 0;
 extern TX_EVENT_FLAGS_GROUP sensor_events;
 
@@ -87,7 +86,7 @@ static void MX_ICACHE_Init(void);
 static void MX_I2S2_Init(void);
 static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
-void process_buffer(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -145,7 +144,7 @@ int main(void)
   HAL_I2S_Receive_DMA(&hi2s2,
                    (uint16_t *)data_i2s,
                    DMA_size);
-  
+
   /* USER CODE END 2 */
 
   MX_ThreadX_Init();
@@ -314,7 +313,7 @@ static void MX_I2S2_Init(void)
   hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_32K;
   hi2s2.Init.CPOL = I2S_CPOL_LOW;
   hi2s2.Init.FirstBit = I2S_FIRSTBIT_MSB;
-  hi2s2.Init.WSInversion = I2S_WS_INVERSION_ENABLE;
+  hi2s2.Init.WSInversion = I2S_WS_INVERSION_DISABLE;
   hi2s2.Init.Data24BitAlignment = I2S_DATA_24BIT_ALIGNMENT_RIGHT;
   hi2s2.Init.MasterKeepIOState = I2S_MASTER_KEEP_IO_STATE_DISABLE;
   if (HAL_I2S_Init(&hi2s2) != HAL_OK)
@@ -517,7 +516,9 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
 void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s2)
 {
   (void)hi2s2;
-  half = 1;  // Second half
+  // Second half of buffer is complete
+  half = 1;  // Process the second half (index 1)
+  
   // Set the event flag
   tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
 }
@@ -525,8 +526,10 @@ void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s2)
 void HAL_I2SEx_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s2)
 {
   (void)hi2s2;
-  half = 0;  // First half
-  // Set the event flag instead of a simple variable
+  // First half of buffer is complete
+  half = 0;  // Process the first half (index 0)
+  
+  // Set the event flag
   tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
 }
 

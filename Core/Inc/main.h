@@ -125,9 +125,9 @@ void Error_Handler(void);
 #define ARD_D0_RX_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-#define AUDIO_BUFFER_SIZE       512
-#define HALF_BUFFER_SIZE       256
-#define TEMP_BUFFER_SIZE        512
+#define AUDIO_BUFFER_SIZE       64
+#define HALF_BUFFER_SIZE       32
+#define TEMP_BUFFER_SIZE        64
 #define AUDIO_DATA_FLAG     0x0001
 #define TEMPHUMID_DATA_FLAG 0x0002  
 #define BUTTON_DATA_FLAG    0x0004
