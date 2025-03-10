@@ -238,21 +238,21 @@ void HAL_I2S_MspInit(I2S_HandleTypeDef* hi2s)
     GPIO_InitStruct.Pin = GPIO_PIN_2;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
     GPIO_InitStruct.Pin = GPIO_PIN_3;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     GPIO_InitStruct.Pin = GPIO_PIN_10;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
@@ -264,8 +264,8 @@ void HAL_I2S_MspInit(I2S_HandleTypeDef* hi2s)
     NodeConfig.Init.Direction = DMA_PERIPH_TO_MEMORY;
     NodeConfig.Init.SrcInc = DMA_SINC_FIXED;
     NodeConfig.Init.DestInc = DMA_DINC_INCREMENTED;
-    NodeConfig.Init.SrcDataWidth = DMA_SRC_DATAWIDTH_WORD;
-    NodeConfig.Init.DestDataWidth = DMA_DEST_DATAWIDTH_WORD;
+    NodeConfig.Init.SrcDataWidth = DMA_SRC_DATAWIDTH_HALFWORD;
+    NodeConfig.Init.DestDataWidth = DMA_DEST_DATAWIDTH_HALFWORD;
     NodeConfig.Init.SrcBurstLength = 1;
     NodeConfig.Init.DestBurstLength = 1;
     NodeConfig.Init.TransferAllocatedPort = DMA_SRC_ALLOCATED_PORT0|DMA_DEST_ALLOCATED_PORT1;
@@ -313,7 +313,7 @@ void HAL_I2S_MspInit(I2S_HandleTypeDef* hi2s)
     }
 
     /* I2S2 interrupt Init */
-    HAL_NVIC_SetPriority(SPI2_IRQn, 11, 0);
+    HAL_NVIC_SetPriority(SPI2_IRQn, 8, 0);
     HAL_NVIC_EnableIRQ(SPI2_IRQn);
   /* USER CODE BEGIN SPI2_MspInit 1 */
 

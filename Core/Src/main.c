@@ -68,12 +68,10 @@ UART_HandleTypeDef huart3;
 /* USER CODE BEGIN PV */
 //For microphone/dma
 
-volatile int32_t data_i2s[AUDIO_BUFFER_SIZE];
-int32_t temp_buffer[TEMP_BUFFER_SIZE];
-//ALIGN_32BYTES(int32_t audioBuffer[AUDIO_BUFFER_SIZE]);
-static uint16_t DMA_size = AUDIO_BUFFER_SIZE *4;
+
+//ALIGN_32BYTES(volatile int32_t data_i2s[AUDIO_BUFFER_SIZE]);
 volatile uint8_t half = 0;
-extern TX_EVENT_FLAGS_GROUP sensor_events;
+extern TX_EVENT_FLAGS_GROUP audio_events;
 
 /* USER CODE END PV */
 
@@ -91,16 +89,13 @@ static void MX_USART3_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 int __io_putchar(int ch)
 {
   /* Place your implementation of fputc here */
   /* e.g. write a character to the USART3 and Loop until the end of transmission */
   HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, 0xFFFF);
-
   return ch;
 }
-
 /* USER CODE END 0 */
 
 /**
@@ -140,10 +135,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   printf("STM32 UDP Application Starting\r\n");
   HAL_UART_Transmit(&huart3, (uint8_t *)"Direct UART test\r\n", 18, 0xFFFF);
-  printf("Started DMA\n");
-  HAL_I2S_Receive_DMA(&hi2s2,
-                   (uint16_t *)data_i2s,
-                   DMA_size);
+
 
   /* USER CODE END 2 */
 
@@ -308,7 +300,7 @@ static void MX_I2S2_Init(void)
   hi2s2.Instance = SPI2;
   hi2s2.Init.Mode = I2S_MODE_MASTER_RX;
   hi2s2.Init.Standard = I2S_STANDARD_PHILIPS;
-  hi2s2.Init.DataFormat = I2S_DATAFORMAT_24B;
+  hi2s2.Init.DataFormat = I2S_DATAFORMAT_16B_EXTENDED;
   hi2s2.Init.MCLKOutput = I2S_MCLKOUTPUT_DISABLE;
   hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_32K;
   hi2s2.Init.CPOL = I2S_CPOL_LOW;
@@ -506,31 +498,18 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
-{
-  if(GPIO_Pin == USER_BTN_Pin) 
-  {
-    HAL_GPIO_WritePin(LED_1_GPIO_Port,LED_1_Pin, GPIO_PIN_SET);
-  }
-}
 void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s2)
 {
   (void)hi2s2;
-  // Second half of buffer is complete
-  half = 1;  // Process the second half (index 1)
-  
-  // Set the event flag
-  tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
+  HAL_GPIO_TogglePin(LED_2_GPIO_Port, LED_2_Pin);
+  half = 1;
+  tx_event_flags_set(&audio_events, AUDIO_DATA_FLAG, TX_OR);
 }
-
 void HAL_I2SEx_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s2)
 {
   (void)hi2s2;
-  // First half of buffer is complete
-  half = 0;  // Process the first half (index 0)
-  
-  // Set the event flag
-  tx_event_flags_set(&sensor_events, AUDIO_DATA_FLAG, TX_OR);
+  half = 0;
+  tx_event_flags_set(&audio_events, AUDIO_DATA_FLAG, TX_OR);
 }
 
 

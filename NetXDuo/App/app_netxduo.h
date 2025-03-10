@@ -105,7 +105,7 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr);
 
 #define NX_APP_PACKET_POOL_SIZE              ((DEFAULT_PAYLOAD_SIZE + sizeof(NX_PACKET)) * 5)
 
-#define NX_APP_THREAD_STACK_SIZE             1024*2
+#define NX_APP_THREAD_STACK_SIZE             1024*4
 
 #define Nx_IP_INSTANCE_THREAD_SIZE           1024
 

@@ -32,30 +32,28 @@ NX_IP          NetXDuoEthIpInstance;
 NX_UDP_SOCKET UDPSocket;
 ULONG IpAddress;
 ULONG NetMask;
-TX_THREAD SensorDataThread;
+TX_THREAD AudioDataThread;
 TX_THREAD AppLinkThread;
-TX_EVENT_FLAGS_GROUP sensor_events;
+TX_EVENT_FLAGS_GROUP audio_events;
 extern UART_HandleTypeDef huart3;
-extern  ETH_HandleTypeDef heth;
+extern ETH_HandleTypeDef heth;
 
 
-
-// mic /dma 
-extern int32_t data_i2s[];
-extern int32_t temp_buffer[];
+static uint16_t DMA_size = AUDIO_BUFFER_SIZE;
+extern I2S_HandleTypeDef hi2s2;
+volatile int16_t data_i2s[AUDIO_BUFFER_SIZE];
 extern volatile uint8_t half;
-int16_t processed_audio[HALF_BUFFER_SIZE];
+int16_t processed_audio[AUDIO_BUFFER_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+static VOID App_Link_Thread_Entry(ULONG thread_input);
 static VOID nx_app_thread_entry (ULONG thread_input);
 /* USER CODE BEGIN PFP */
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
-static VOID sensor_thread_entry(ULONG thread_input);
-UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port);
-int16_t process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size);
-void print_hex(uint32_t value);
-
+static VOID audio_thread_entry(ULONG thread_input);
+UINT UDP_Send(void* data_ptr, UINT data_size, ULONG destination_ip, UINT destination_port);
+int16_t process_i2s_data(volatile int16_t* source, int16_t* dest, uint16_t size);
 /* USER CODE END PFP */
 
 /**
@@ -159,17 +157,32 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
   {
     return TX_POOL_ERROR;
   }
-  ret = tx_thread_create(&SensorDataThread, "Sensor Data Thread", sensor_thread_entry, 0, 
-                        pointer, NX_APP_THREAD_STACK_SIZE,
-                        SENSOR_THREAD_PRIORITY, SENSOR_THREAD_PRIORITY, 
-                        TX_NO_TIME_SLICE, TX_AUTO_START);
 
-if (ret != TX_SUCCESS)
-{
-return TX_THREAD_ERROR;
-}
-  /* USER CODE BEGIN MX_NetXDuo_Init */
-  tx_event_flags_create(&sensor_events, "Sensor Events");
+  /* Create the main thread */
+  ret = tx_thread_create(&AudioDataThread, "Audio thread", audio_thread_entry , 0, pointer, NX_APP_THREAD_STACK_SIZE,
+                         NX_APP_THREAD_PRIORITY, NX_APP_THREAD_PRIORITY, TX_NO_TIME_SLICE, TX_DONT_START);
+
+  if (ret != TX_SUCCESS)
+  {
+    return TX_THREAD_ERROR;
+  }
+  // event flag
+  ret = tx_event_flags_create(&audio_events, "Audio Events");
+  if (ret != TX_SUCCESS)
+  {
+    return TX_GROUP_ERROR;
+  }
+  if (tx_byte_allocate(byte_pool, (VOID **) &pointer,2 *  DEFAULT_MEMORY_SIZE, TX_NO_WAIT) != TX_SUCCESS)
+  {
+    return TX_POOL_ERROR;
+  }
+  /* create the Link thread */
+  ret = tx_thread_create(&AppLinkThread, "App Link Thread", App_Link_Thread_Entry, 0, pointer, 2 * DEFAULT_MEMORY_SIZE,
+                         LINK_PRIORITY, LINK_PRIORITY, TX_NO_TIME_SLICE, TX_AUTO_START);
+  if (ret != TX_SUCCESS)
+  {
+    return TX_THREAD_ERROR;
+  }
   /* USER CODE END MX_NetXDuo_Init */
 
   return ret;
@@ -184,43 +197,13 @@ static VOID nx_app_thread_entry (ULONG thread_input)
 {
   /* USER CODE BEGIN Nx_App_Thread_Entry 0 */
   (void)thread_input;
-  tx_thread_sleep(400); /* Sleep for 1 second to allow Ethernet to initialize */
-  printf("Starting UDP server after initialization delay\r\n");
   UINT ret;
-  ULONG bytes_read;
-  UCHAR data_buffer[512];
-  ULONG source_ip_address;
-  NX_PACKET *server_packet;
-  UINT source_port;
-/* Check PHY link status using the correct function signature */
-uint32_t regvalue = 0;
-/* Basic Status Register address is 0x01 for most PHYs */
-#define PHY_BASIC_STATUS_REG    0x01
-/* Link status bit is usually bit 2 in the Basic Status Register */
-#define PHY_LINK_STATUS_BIT     0x0004
-
-/* We need to provide the PHY address - usually 0 or 1 for most STM32 boards */
-uint32_t PHYAddr = 0; /* Use 0 for most common configurations */
-  /* Add hardware status check */
-  extern ETH_HandleTypeDef heth; /* Make sure this matches your Ethernet handle name */
-  printf("Ethernet hardware initialized: %s\r\n", 
-         (heth.gState == HAL_ETH_STATE_READY) ? "Ready" : "Not Ready");
-         
-HAL_StatusTypeDef status = HAL_ETH_ReadPHYRegister(&heth, PHYAddr, PHY_BASIC_STATUS_REG, &regvalue);
-if (status == HAL_OK) {
-    printf("PHY status register: 0x%08lX\r\n", regvalue);
-    printf("Link status: %s\r\n", (regvalue & PHY_LINK_STATUS_BIT) ? "UP" : "DOWN");
-} else {
-    printf("Failed to read PHY register, status: %d\r\n", status);
-}
-
-/* Get current MAC address */
-printf("Current MAC: %02X-%02X-%02X-%02X-%02X-%02X\r\n", 
-  heth.Init.MACAddr[0], heth.Init.MACAddr[1], heth.Init.MACAddr[2],
-  heth.Init.MACAddr[3], heth.Init.MACAddr[4], heth.Init.MACAddr[5]);
-  /*
-   * Print IPv4
-   */
+  tx_thread_sleep(300);
+  printf("Starting UDP server after initialization delay\r\n");
+  printf("Current MAC: %02X-%02X-%02X-%02X-%02X-%02X\r\n", 
+    heth.Init.MACAddr[0], heth.Init.MACAddr[1], heth.Init.MACAddr[2],
+    heth.Init.MACAddr[3], heth.Init.MACAddr[4], heth.Init.MACAddr[5]);
+ 
   ret = nx_ip_address_get(&NetXDuoEthIpInstance, &IpAddress, &NetMask);
   if (ret != TX_SUCCESS)
   {
@@ -235,134 +218,139 @@ printf("Current MAC: %02X-%02X-%02X-%02X-%02X-%02X\r\n",
              (NetMask >> 24) & 0xFF, (NetMask >> 16) & 0xFF,
              (NetMask >> 8) & 0xFF, NetMask & 0xFF);
   }
-
-/*Create a UDP Socket and bind to it*/
   ret = nx_udp_socket_create(&NetXDuoEthIpInstance, &UDPSocket,
-                             "UDP Server Socket", NX_IP_NORMAL,
+                             "UDP Audio Socket", NX_IP_NORMAL,
                               NX_FRAGMENT_OKAY, NX_IP_TIME_TO_LIVE, QUEUE_MAX_SIZE);
   if (ret != NX_SUCCESS)
   {
       Error_Handler();
-      printf("Socket not created.");
+      printf("Socket not created.\r\n");
   }
-/* Bind to port 6000 */
-  ret = nx_udp_socket_bind(&UDPSocket, DEFAULT_PORT, TX_WAIT_FOREVER);
+  ret = nx_udp_socket_bind(&UDPSocket, AUDIO_PORT, TX_WAIT_FOREVER);
   if (ret != NX_SUCCESS)
   {
     printf("Socket bind failed with error: %d\r\n", ret);
-     Error_Handler();
+    Error_Handler();
   }
   else
   {
-      printf("UDP Server listening on PORT 6000.. \r\n");
+      printf("Data will be sent on PORT %d\r\n", AUDIO_PORT);
   }
-/*  Main Task Loop
-    Waits 1 second (100 centiseconds) for each UDP packet. If received, print out message*/
-  while (1)
-  {
-      TX_MEMSET(data_buffer, '\0', sizeof(data_buffer));
-      /* wait for data for 1 sec */
-      ret = nx_udp_socket_receive(&UDPSocket, &server_packet, 100);
-      if (ret == NX_SUCCESS)
-{
-    nx_packet_data_retrieve(server_packet, data_buffer, &bytes_read);
-    nx_udp_source_extract(server_packet, &source_ip_address, &source_port);
-    /* Print our received data on UART com port*/
-    PRINT_DATA(source_ip_address, source_port, data_buffer);
-    // new line to make print out more readable
-    nx_packet_release(server_packet);
-}
+  tx_thread_resume(&AudioDataThread);
+
+  
+  /* Main thread has completed initialization */
   /* USER CODE END Nx_App_Thread_Entry 0 */
-  }
+
 }
 /* USER CODE BEGIN 1 */
-void sensor_thread_entry(ULONG thread_input)
+static VOID App_Link_Thread_Entry(ULONG thread_input)
+{ 
+  (void)thread_input;   
+  ULONG actual_status;
+  UINT linkdown = 0, status;
+
+  while(1)
+  {
+    /* Get Physical Link status. */
+    status = nx_ip_interface_status_check(&NetXDuoEthIpInstance, 0, NX_IP_LINK_ENABLED,
+                                      &actual_status, 10);
+
+    if(status == NX_SUCCESS)
+    {
+      if(linkdown == 1)
+      {
+        linkdown = 0;
+        status = nx_ip_interface_status_check(&NetXDuoEthIpInstance, 0, NX_IP_ADDRESS_RESOLVED,
+                                      &actual_status, 10);
+        if(status == NX_SUCCESS)
+        {
+
+          printf("The network cable is connected again.\n");
+       }
+        else
+        {
+          printf("The network cable is connected.\n");
+        }
+        nx_ip_driver_direct_command(&NetXDuoEthIpInstance, NX_LINK_ENABLE,
+                                    &actual_status);
+        
+        tx_thread_resume(&NxAppThread);
+      }
+    }
+    else
+    {
+      if(0 == linkdown)
+      {
+        linkdown = 1;
+        /* The network cable is not connected. */
+        printf("The network cable is not connected.\n");
+        tx_thread_suspend(&AudioDataThread);
+        tx_thread_suspend(&NxAppThread);
+      }
+    }
+
+    tx_thread_sleep(100);
+  }
+}
+void audio_thread_entry(ULONG thread_input)
 {
-    tx_thread_sleep(500);
+    printf("Audio thread started");
+    tx_thread_sleep(500); /* Sleep to allow network initialization */
     (void)thread_input;
-    UDP_Data_Packet packet;
-    packet.destination_ip = DESTINATION_IP;
     ULONG actual_flags;
+    ULONG destination_ip = DESTINATION_IP; /* Make sure this is defined in your header */
+    HAL_I2S_Receive_DMA(&hi2s2,
+      (uint16_t *)data_i2s,
+      DMA_size);
+    printf("Started DMA\n");
+    printf("Audio thread started. Waiting for audio data...\r\n");
     
     while(1)
     {
-        // Wait for ANY flag to be set (blocking approach)
-        tx_event_flags_get(&sensor_events, 
-                          AUDIO_DATA_FLAG | TEMPHUMID_DATA_FLAG | BUTTON_DATA_FLAG,
-                          TX_OR_CLEAR,  // Get any flag and clear it
+        /* Wait for audio data flag to be set */
+        tx_event_flags_get(&audio_events, 
+                          AUDIO_DATA_FLAG,
+                          TX_OR_CLEAR,  /* Get the flag and clear it */
                           &actual_flags, 
-                          TX_WAIT_FOREVER);  // Block until any flag is set
-        
-        // Process the flags in priority order (if timing is critical)
+                          TX_WAIT_FOREVER);  /* Block until flag is set */
         if(actual_flags & AUDIO_DATA_FLAG)
         {
-            // Process audio data first (highest priority)
-            uint32_t* source_buffer = data_i2s + (HALF_BUFFER_SIZE * half);
-            
-            uint16_t actual_samples = process_i2s_data(source_buffer, processed_audio, HALF_BUFFER_SIZE);
-            packet.data_ptr = processed_audio;
-            packet.data_size = actual_samples * sizeof(int16_t);
-            packet.data_type = 0;
-            UDP_Send(&packet, AUDIO_PORT);
-        }
-        
-        if(actual_flags & TEMPHUMID_DATA_FLAG)
-        {
-            // Process temperature data
-            packet.data_ptr = temp_buffer;
-            packet.data_size = TEMP_BUFFER_SIZE;
-            packet.data_type = 1;
-            
-            UDP_Send(&packet, TEMPHUMID_PORT);
-        }
-        
-        if(actual_flags & BUTTON_DATA_FLAG)
-        {
-            // Process button press (lowest priority)
-            char button_msg[32];
-            static UINT button_count = 0;
-            snprintf(button_msg, sizeof(button_msg), "Button pressed! Count: %d", button_count++);
-            
-            packet.data_ptr = button_msg;
-            packet.data_size = strlen(button_msg);
-            packet.data_type = 2;
-            
-            UDP_Send(&packet, BUTTON_PORT);
+            volatile int16_t* source_buffer = &data_i2s[HALF_BUFFER_SIZE * half];
+            uint16_t processed_size =process_i2s_data(source_buffer, processed_audio, HALF_BUFFER_SIZE);
+            UINT result = UDP_Send(processed_audio, 
+                                  processed_size * sizeof(int16_t),
+                                 destination_ip, 
+                                 AUDIO_PORT);
+            if (result != NX_SUCCESS) {
+                printf("Failed to send audio data, error: %d\r\n", result);
+            }
         }
     }
 }
-/* UDP sending function */
-UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
+UINT UDP_Send(void* data_ptr, UINT data_size, ULONG destination_ip, UINT destination_port)
 {
   UINT ret;
-  NX_PACKET* nx_packet_ptr;
-  
-  /* Validate inputs */
-  if (packet == NULL || packet->data_ptr == NULL || packet->data_size == 0)
+  NX_PACKET *nx_packet_ptr;
+  if (data_ptr == NULL || data_size == 0)
   {
       return NX_INVALID_PARAMETERS;
-  }
-  
-  /* Allocate a packet */
+  } 
   ret = nx_packet_allocate(&NxAppPool, &nx_packet_ptr, NX_UDP_PACKET, TX_WAIT_FOREVER);
   if (ret != NX_SUCCESS)
   {
       printf("Packet allocation failed: %d\r\n", ret);
       return ret;
-  }
-  
-  /* Append data to the packet */
-  ret = nx_packet_data_append(nx_packet_ptr, packet->data_ptr, packet->data_size, 
+  }  
+  ret = nx_packet_data_append(nx_packet_ptr, data_ptr, data_size, 
                              &NxAppPool, TX_WAIT_FOREVER);
   if (ret != NX_SUCCESS)
   {
       printf("Data append failed: %d\r\n", ret);
       nx_packet_release(nx_packet_ptr);
       return ret;
-  }
-  
-  /* Send the UDP packet */
-  ret = nx_udp_socket_send(&UDPSocket, nx_packet_ptr, packet->destination_ip, destination_port);
+  }  
+  ret = nx_udp_socket_send(&UDPSocket, nx_packet_ptr, destination_ip, destination_port);
   if (ret != NX_SUCCESS)
   {
       printf("UDP send failed: %d\r\n", ret);
@@ -372,32 +360,18 @@ UINT UDP_Send(UDP_Data_Packet* packet, UINT destination_port )
   
   return NX_SUCCESS;
 }
-
-int16_t process_i2s_data(uint32_t* source, int16_t* dest, uint16_t size) { 
-  // static uint32_t debug_counter = 0;  
-  // if (debug_counter++ % 100 == 0) {
-  //   printf("Hex values:\n");
-  //   for (uint16_t i = 0; i < 10 && i < size; i++) {
-  //     print_hex(source[i]);
-  //     int32_t sample = (int32_t)source[i];
-  //     int32_t data18 = ((sample >> 6) & 0x3FFFF);
-  //     int16_t reduced = (int16_t)(data18 >>2);
-  //     print_hex1(reduced);
-  //   }
-  // }
+int16_t process_i2s_data(volatile int16_t* source, int16_t* dest, uint16_t size) { 
   uint16_t dest_idx = 0;
-  for (uint16_t i = 0; i < size; i++) {    
-    if (source[i] == 0x00000000){continue;}
-    int32_t sample = (int32_t)source[i];
-    //int32_t data18 = ((sample >> 6) & 0x3FFFF);
-    dest[dest_idx++] = (int16_t)(sample >>2);
+  for (uint16_t i = 0; i < size; i += 2) {  // Step by 2 to skip zeros
+    dest[dest_idx++] = source[i];  // Take only the active channel
   }
+  
+  static uint32_t debug_counter = 0;
+  if (debug_counter++ % 500 == 0) {
+      printf("Sample values: %d, %d, %d, %d, %d\r\n", 
+             source[0], source[1], source[2], source[3], source[4]);
+  }
+
   return dest_idx;
-}
-void print_hex(uint32_t value) {
-  printf("0x%08lX\n", (unsigned long)value);
-}
-void print_hex1(uint16_t value) {
-  printf("0x%08lX\n", (unsigned long)value);
 }
 /* USER CODE END 1 */
