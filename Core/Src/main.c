@@ -505,7 +505,7 @@ void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s2)
   half = 1;
   tx_event_flags_set(&audio_events, AUDIO_DATA_FLAG, TX_OR);
 }
-void HAL_I2SEx_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s2)
+void HAL_I2S_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s2)
 {
   (void)hi2s2;
   half = 0;
