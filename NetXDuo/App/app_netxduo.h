@@ -92,11 +92,11 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr);
 #define SENSOR_THREAD_STACK_SIZE 1024
 #define SENSOR_THREAD_PRIORITY 5
 
+//#define DESTINATION_IP                    IP_ADDRESS(172, 18, 239, 188)
 #define DESTINATION_IP                    IP_ADDRESS(192, 168, 1, 101)
 
-#define AUDIO_PORT                        6001
-#define TEMPHUMID_PORT                    6002
-#define BUTTON_PORT                       6003
+
+
 
 
 /* USER CODE END PD */
@@ -116,7 +116,6 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr);
 #endif
 
 #define NX_APP_DEFAULT_IP_ADDRESS                   IP_ADDRESS(192, 168, 1, 111)
-
 #define NX_APP_DEFAULT_NET_MASK                     IP_ADDRESS(255, 255, 255, 0)
 
 /* USER CODE BEGIN 1 */

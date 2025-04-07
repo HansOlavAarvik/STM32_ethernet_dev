@@ -132,6 +132,17 @@ void Error_Handler(void);
 #define TEMPHUMID_DATA_FLAG 0x0002  
 #define BUTTON_DATA_FLAG    0x0004
 
+#define VIBRATION_DATA        1
+#define INSIDE_TEMP_DATA      2
+#define OUTSIDE_TEMP_DATA     3
+#define INSIDE_HUMID_DATA     4
+#define OUTSIDE_HUMID_DATA    5
+#define TOF_DATA              6
+
+#define AUDIO_PORT                        6001
+#define JSON_PORT                         6002
+
+
 // Define the UDP_Data_Packet structure
 typedef struct {
   void* data_ptr;

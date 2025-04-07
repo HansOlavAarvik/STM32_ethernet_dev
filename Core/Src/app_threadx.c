@@ -23,7 +23,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "main.h"
+#include "app_netxduo.h"
+#include <stdio.h>
+#include "json_handle.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -82,6 +85,7 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
   }
 
   /* USER CODE BEGIN App_ThreadX_Init */
+  json_handle_initialize();
   /* USER CODE END App_ThreadX_Init */
 
   return ret;
@@ -95,6 +99,47 @@ void tx_app_thread_entry(ULONG thread_input)
 {
   /* USER CODE BEGIN tx_app_thread_entry */
 
+// #define VIBRATION_DATA        1
+// #define OUTSIDE_TEMP_DATA     3
+// #define INSIDE_HUMID_DATA     4
+// #define OUTSIDE_HUMID_DATA    5
+// #define TOF_DATA              6
+  uint16_t in_temp = 24;
+  uint16_t in_humid  =  20;
+  uint16_t out_temp  =  14;
+  uint16_t out_humid  =  15;
+  uint16_t tof  =  3;
+  UINT switch_flag = 0;
+  while(1){
+    if(in_temp > 30){
+      switch_flag =1;
+    }
+    if(in_temp < 5){
+      switch_flag = 0;
+    }
+  if (switch_flag == 0){
+    in_temp     += 1;
+    in_humid    += 1;
+    out_temp    += 1;
+    out_humid   += 1;
+    tof         += 1;
+  }
+  if(switch_flag == 1){
+    in_temp     -= 1;
+    in_humid    -= 1;
+    out_temp    -= 1;
+    out_humid   -= 1;
+    tof         -= 1;
+  }
+  add_sensor_data(in_temp,INSIDE_TEMP_DATA);
+  add_sensor_data(out_temp,OUTSIDE_TEMP_DATA);
+  add_sensor_data(in_humid,INSIDE_HUMID_DATA);
+  add_sensor_data(out_humid,OUTSIDE_HUMID_DATA);
+  add_sensor_data(out_humid+2,OUTSIDE_HUMID_DATA);
+  add_sensor_data(tof,TOF_DATA);
+  tx_thread_sleep(100);
+  }
+  
   /* USER CODE END tx_app_thread_entry */
 }
 

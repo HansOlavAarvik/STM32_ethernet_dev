@@ -110,6 +110,7 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
     /* Allocate the memory for ARP */
   if (tx_byte_allocate(byte_pool, (VOID **) &pointer, DEFAULT_ARP_CACHE_SIZE, TX_NO_WAIT) != TX_SUCCESS)
   {
+    
     return TX_POOL_ERROR;
   }
 
