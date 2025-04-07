@@ -47,13 +47,13 @@ int16_t processed_audio[AUDIO_BUFFER_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-static VOID App_Link_Thread_Entry(ULONG thread_input);
 static VOID nx_app_thread_entry (ULONG thread_input);
 /* USER CODE BEGIN PFP */
 UINT MX_NetXDuo_Init(VOID *memory_ptr);
 static VOID audio_thread_entry(ULONG thread_input);
 UINT UDP_Send(void* data_ptr, UINT data_size, ULONG destination_ip, UINT destination_port);
 int16_t process_i2s_data(volatile int16_t* source, int16_t* dest, uint16_t size);
+static VOID App_Link_Thread_Entry(ULONG thread_input);
 /* USER CODE END PFP */
 
 /**
@@ -110,7 +110,6 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr)
     /* Allocate the memory for ARP */
   if (tx_byte_allocate(byte_pool, (VOID **) &pointer, DEFAULT_ARP_CACHE_SIZE, TX_NO_WAIT) != TX_SUCCESS)
   {
-    
     return TX_POOL_ERROR;
   }
 

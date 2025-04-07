@@ -116,6 +116,7 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr);
 #endif
 
 #define NX_APP_DEFAULT_IP_ADDRESS                   IP_ADDRESS(192, 168, 1, 111)
+
 #define NX_APP_DEFAULT_NET_MASK                     IP_ADDRESS(255, 255, 255, 0)
 
 /* USER CODE BEGIN 1 */

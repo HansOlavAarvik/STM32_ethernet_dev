@@ -1,0 +1,20 @@
+{
+    "files.associations": {
+        "stdio.h": "c",
+        "array": "c",
+        "deque": "c",
+        "forward_list": "c",
+        "list": "c",
+        "string": "c",
+        "unordered_map": "c",
+        "vector": "c",
+        "iterator": "c",
+        "string_view": "c",
+        "nx_stm32_eth_config.h": "c",
+        "compare": "c",
+        "main.h": "c",
+        "socket": "c",
+        "type_traits": "c",
+        "stm32h5xx_hal_rtc.h": "c"
+    }
+}

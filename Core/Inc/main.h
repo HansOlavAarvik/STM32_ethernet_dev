@@ -138,6 +138,7 @@ void Error_Handler(void);
 #define INSIDE_HUMID_DATA     4
 #define OUTSIDE_HUMID_DATA    5
 #define TOF_DATA              6
+#define TIMESTAMP_DATA        7
 
 #define AUDIO_PORT                        6001
 #define JSON_PORT                         6002
